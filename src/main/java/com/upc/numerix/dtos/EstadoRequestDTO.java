@@ -1,4 +1,4 @@
-package com.upc.numerix.dtos;
+package com.upc.products.dtos;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
