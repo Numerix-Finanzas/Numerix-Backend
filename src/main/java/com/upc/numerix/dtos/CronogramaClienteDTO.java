@@ -1,6 +1,5 @@
-package com.upc.products.dtos;
+package com.upc.numerix.dtos;
 
-import com.upc.numerix.dtos.CronogramaDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

@@ -1,4 +1,4 @@
-package com.upc.products.dtos;
+package com.upc.numerix.dtos;
 
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;

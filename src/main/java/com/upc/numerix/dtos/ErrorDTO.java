@@ -1,4 +1,4 @@
-package com.upc.products.dtos;
+package com.upc.numerix.dtos;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

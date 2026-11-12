@@ -1,6 +1,5 @@
-package com.upc.products.entities;
+package com.upc.numerix.entities;
 
-import com.upc.numerix.entities.Negocio;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

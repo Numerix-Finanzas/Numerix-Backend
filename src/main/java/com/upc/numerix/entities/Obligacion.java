@@ -1,4 +1,4 @@
-package com.upc.products.entities;
+package com.upc.numerix.entities;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
