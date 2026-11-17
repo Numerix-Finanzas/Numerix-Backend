@@ -19,7 +19,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /*
  Ejecuta los juegos de prueba 1 a 4 del informe (apartado 6.4) contra la API completa:
  seguridad JWT, controladores, servicios y base de datos H2 en memoria.
- Los importes esperados son los de las tablas del informe.
+ Los importes esperados son los de las tablas del informe. La base parte de import.sql, que ya trae
+ a Rosa y Carlos; por eso aquí se registran con otros números de documento.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -40,17 +41,17 @@ class JuegosDePruebaTest {
 
         enviar(negocio, "/api/clientes", Map.ofEntries(
                 Map.entry("nombreCliente", "Rosa Quispe Huamán"), Map.entry("tipoDocumentoCliente", "DNI"),
-                Map.entry("numeroDocumentoCliente", "45871236"), Map.entry("moneda", "PEN"),
+                Map.entry("numeroDocumentoCliente", "45871237"), Map.entry("moneda", "PEN"),
                 Map.entry("limiteCredito", 500), Map.entry("tipoTasa", "Efectiva"), Map.entry("porcentajeTasa", 30),
                 Map.entry("tipoTasaMoratoria", "Efectiva"), Map.entry("porcentajeTasaMoratoria", 15),
                 Map.entry("periodoTasa", "Anual"), Map.entry("diaCorte", 25), Map.entry("diaPagoPactado", 30),
                 Map.entry("maximoMesesCredito", 3)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.usuario").value("45871236"))
-                .andExpect(jsonPath("$.contrasena").value("NX45871236"))
+                .andExpect(jsonPath("$.usuario").value("45871237"))
+                .andExpect(jsonPath("$.contrasena").value("NX45871237"))
                 .andExpect(jsonPath("$.cliente.tedCompensatoria").value(0.0007291))
                 .andExpect(jsonPath("$.cliente.tedMoratoria").value(0.0003883));
-        String rosa = "CLI-45871236";
+        String rosa = "CLI-45871237";
 
         String arroz = producto(negocio, "Arroz Costeño 5 kg", "28.00", "30.00");
         String aceite = producto(negocio, "Aceite Primor 1 L", "9.50", "10.00");
@@ -139,7 +140,7 @@ class JuegosDePruebaTest {
                 .andExpect(jsonPath("$.mensaje").value("La compra " + idC001 + " es a un solo pago: no tiene cronograma de pagos."));
 
         // Seguridad: la clienta solo ve su información y no puede registrar compras
-        String clienta = login("45871236", "NX45871236");
+        String clienta = login("45871237", "NX45871237");
         consultar(clienta, "/api/clientes/" + rosa + "/reporte-deuda").andExpect(status().isOk());
         compra(clienta, rosa, arroz, 1, "Un solo pago", null, "2026-10-10", 403);
         consultar(admin, "/api/clientes/" + rosa).andExpect(status().isForbidden());
@@ -157,7 +158,7 @@ class JuegosDePruebaTest {
 
         enviar(negocio, "/api/clientes", Map.ofEntries(
                 Map.entry("nombreCliente", "Carlos Mendoza Ríos"), Map.entry("tipoDocumentoCliente", "DNI"),
-                Map.entry("numeroDocumentoCliente", "70412589"), Map.entry("moneda", "PEN"),
+                Map.entry("numeroDocumentoCliente", "70412590"), Map.entry("moneda", "PEN"),
                 Map.entry("limiteCredito", 1000), Map.entry("tipoTasa", "Nominal"), Map.entry("porcentajeTasa", 24),
                 Map.entry("tipoTasaMoratoria", "Nominal"), Map.entry("porcentajeTasaMoratoria", 12),
                 Map.entry("periodoTasa", "Anual"), Map.entry("periodoCapitalizacion", 30),
@@ -166,15 +167,15 @@ class JuegosDePruebaTest {
                 .andExpect(jsonPath("$.cliente.temCompensatoria").value(0.02))
                 .andExpect(jsonPath("$.cliente.tedCompensatoria").value(0.0006603))
                 .andExpect(jsonPath("$.cliente.tedMoratoria").value(0.0003317));
-        String carlos = "CLI-70412589";
-        String licuadora = producto(negocio, "Licuadora Oster 1.5 L", "420.00", "450.00");
-        String tostadora = producto(negocio, "Tostadora Imaco", "45.00", "50.00");
+        String carlos = "CLI-70412590";
+        String papel = producto(negocio, "Papel higiénico Elite 4 rollos", "4.20", "4.50");
+        String detergente = producto(negocio, "Detergente Bolívar 500 g", "4.50", "5.00");
 
         // 3.3: más cuotas que el máximo permitido
-        compra(negocio, carlos, licuadora, 1, "Cuotas", 8, "2026-09-15", 422)
+        compra(negocio, carlos, papel, 100, "Cuotas", 8, "2026-09-15", 422)
                 .andExpect(jsonPath("$.mensaje").value("El número de cuotas supera el máximo permitido (6)."));
 
-        String idCompra = json(compra(negocio, carlos, licuadora, 1, "Cuotas", 3, "2026-09-15")
+        String idCompra = json(compra(negocio, carlos, papel, 100, "Cuotas", 3, "2026-09-15")
                 .andExpect(jsonPath("$.diasGracia").value(11))
                 .andExpect(jsonPath("$.factorCapitalizacion").value(1.0072873))
                 .andExpect(jsonPath("$.capitalActualizado").value(453.28))
@@ -202,8 +203,8 @@ class JuegosDePruebaTest {
         long cuota2 = cronograma.get("cuotas").get(1).get("idCuota").asLong();
         long cuota3 = cronograma.get("cuotas").get(2).get("idCuota").asLong();
 
-        // Pantalla Cronograma: se elige el cliente y se ven sus compras en cuotas (no la tostadora a un solo pago)
-        compra(negocio, carlos, tostadora, 1, "Un solo pago", null, "2026-09-16");
+        // Pantalla Cronograma: se elige el cliente y se ven sus compras en cuotas (no la de detergente a un solo pago)
+        compra(negocio, carlos, detergente, 10, "Un solo pago", null, "2026-09-16");
         consultar(negocio, "/api/clientes/" + carlos + "/cronograma")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cronogramas.length()").value(1))
@@ -243,7 +244,7 @@ class JuegosDePruebaTest {
                 .andExpect(jsonPath("$.montoImputadoInteres").value(1.53))
                 .andExpect(jsonPath("$.montoImputadoCapital").value(154.09))
                 .andExpect(jsonPath("$.estadoDeuda").value("Pagado"))
-                // 1000 - 50 de la tostadora a un solo pago, que sigue pendiente
+                // 1000 - 50 de los detergentes a un solo pago, que siguen pendientes
                 .andExpect(jsonPath("$.creditoDisponible").value(950.00));
 
         consultar(negocio, "/api/compras/" + idCompra + "/cronograma")
@@ -252,7 +253,7 @@ class JuegosDePruebaTest {
 
         // 3.4: cliente inactivo
         actualizar(negocio, "/api/clientes/" + carlos + "/estado", Map.of("estado", "Inactivo")).andExpect(status().isOk());
-        compra(negocio, carlos, tostadora, 1, "Un solo pago", null, "2026-12-15", 422)
+        compra(negocio, carlos, detergente, 10, "Un solo pago", null, "2026-12-15", 422)
                 .andExpect(jsonPath("$.mensaje").value("El cliente se encuentra inactivo y no puede registrar nuevas compras."));
     }
 

@@ -11,8 +11,9 @@ erDiagram
   CLIENTE |o--o| USUARIO : "accede con"
   CLIENTE ||--|| CONDICION_CREDITO : "tiene"
   CLIENTE ||--o{ COMPRA : "realiza"
-  PRODUCTO ||--o{ COMPRA : "se compra en"
   COMPRA ||--|| OBLIGACION : "origina"
+  COMPRA ||--|{ DETALLE_COMPRA : "contiene"
+  PRODUCTO ||--o{ DETALLE_COMPRA : "se vende en"
   OBLIGACION ||--|{ CUOTA : "se divide en"
   OBLIGACION ||--o{ PAGO : "recibe"
   CUOTA ||--o| PAGO : "se cancela con"
@@ -82,14 +83,19 @@ erDiagram
   COMPRA {
     varchar(20) id_compra PK
     varchar(20) id_cliente FK
-    varchar(20) id_producto FK
     date fecha_compra
-    integer cantidad_producto
     varchar(15) tipo_pago "Un solo pago / Cuotas"
     integer numero_cuotas
-    numeric precio_credito_aplicado "18,2"
-    numeric monto_compra "18,2"
+    numeric monto_compra "18,2 suma de subtotales"
     timestamp fecha_registro
+  }
+  DETALLE_COMPRA {
+    bigint id_detalle_compra PK "IDENTITY"
+    varchar(20) id_compra FK "UK con id_producto"
+    varchar(20) id_producto FK
+    integer cantidad_producto "> 0"
+    numeric precio_credito_aplicado "18,2"
+    numeric subtotal "18,2"
   }
   OBLIGACION {
     varchar(20) id_obligacion PK
@@ -142,6 +148,7 @@ erDiagram
 
 | Tabla | Cambio | Motivo |
 |---|---|---|
+| `detalle_compra` | Tabla nueva (una línea por producto); `compra` pierde `id_producto`, `cantidad_producto` y `precio_credito_aplicado` | Una compra puede tener varios productos distintos; el monto, los intereses y las cuotas se calculan sobre el total. |
 | `condicion_credito` | Tabla nueva (1 a 1 con `cliente`) con moneda, límite, tasas, periodos, corte, pago y máximo de meses | No son datos del cliente en sí, sino del crédito que el negocio le otorga. |
 | `rol` + `usuario` | Reemplazan a `usuario_sistema` | El rol queda en su propia tabla y se carga en la base de datos inicial. |
 | `obligacion` | + `dias_gracia` | El cronograma conserva los días de gracia que se capitalizaron. |
