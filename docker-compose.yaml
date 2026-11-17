@@ -1,0 +1,29 @@
+services:
+  app:
+    image: 'numerix-backend:latest'
+    build:
+      context: .
+    container_name: numerix-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/db_numerix
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
+  db:
+    image: postgres:16-alpine
+    restart: always
+    container_name: numerix-db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=db_numerix
+    ports:
+      - "5433:5432"
+volumes:
+  db_data:
