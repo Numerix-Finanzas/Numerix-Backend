@@ -20,11 +20,12 @@ public class CompraResultadoDTO {
     private String idObligacion;
     private String idCliente;
     private String nombreCliente;
+    // Productos separados por comas; cantidadProducto = unidades en total
     private String descripcionProducto;
     private String moneda;
     private LocalDate fechaCompra;
     private Integer cantidadProducto;
-    private BigDecimal precioCredito;
+    private java.util.List<DetalleCompraDTO> detalles;
     private BigDecimal montoCompra;
     private String tipoPago;
     private Integer numeroCuotas;

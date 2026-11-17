@@ -2,6 +2,8 @@ package com.upc.numerix.serviceimpl;
 
 import com.upc.numerix.dtos.CompraRequestDTO;
 import com.upc.numerix.dtos.CompraResultadoDTO;
+import com.upc.numerix.dtos.DetalleCompraDTO;
+import com.upc.numerix.dtos.DetalleCompraRequestDTO;
 import com.upc.numerix.entities.*;
 import com.upc.numerix.exceptions.OperacionRechazadaException;
 import com.upc.numerix.exceptions.RecursoNoEncontradoException;
@@ -22,7 +24,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.upc.numerix.finanzas.CalculadoraFinanciera.*;
 
@@ -41,7 +47,7 @@ public class CompraServiceImpl implements CompraService {
     private CuentaCorriente cuentaCorriente;
 
     // Datos calculados de una compra antes de registrarla
-    private record PlanCompra(Cliente cliente, Producto producto, LocalDate fechaCompra, int numeroCuotas,
+    private record PlanCompra(Cliente cliente, List<DetalleCompra> detalles, LocalDate fechaCompra, int numeroCuotas,
                               BigDecimal montoCompra, BigDecimal capitalActualizado, int diasGracia,
                               List<FilaCronograma> cuotas, CompraResultadoDTO resultado) {
     }
@@ -65,14 +71,15 @@ public class CompraServiceImpl implements CompraService {
         Compra compra = new Compra();
         compra.setIdCompra(GeneradorId.siguiente("CMP-", 6, compraRepositorio));
         compra.setCliente(cliente);
-        compra.setProducto(plan.producto());
         compra.setFechaCompra(plan.fechaCompra());
-        compra.setCantidadProducto(request.getCantidadProducto());
         compra.setTipoPago(request.getTipoPago());
         compra.setNumeroCuotas(plan.numeroCuotas());
-        compra.setPrecioCreditoAplicado(plan.producto().getPrecioCredito());
         compra.setMontoCompra(plan.montoCompra());
         compra.setFechaRegistro(ahora);
+        for (DetalleCompra detalle : plan.detalles()) {
+            detalle.setCompra(compra);
+            compra.getDetalles().add(detalle);
+        }
         compra = compraRepositorio.save(compra);
 
         // La obligación guarda una copia de las condiciones de tasa vigentes del cliente
@@ -116,35 +123,65 @@ public class CompraServiceImpl implements CompraService {
         return resultado;
     }
 
+    /*
+     Arma las líneas de la compra. Cada producto debe ser del negocio, estar activo, no repetirse y
+     admitir el tipo de pago elegido para la compra (su modalidad de venta).
+     */
+    private List<DetalleCompra> armarDetalles(CompraRequestDTO request, Negocio negocio, boolean enCuotas) {
+        List<DetalleCompraRequestDTO> lineas = request.lineas();
+        if (lineas.isEmpty()) {
+            throw new OperacionRechazadaException("Agregue al menos un producto a la compra.");
+        }
+        Set<String> vistos = new HashSet<>();
+        List<DetalleCompra> detalles = new ArrayList<>();
+        for (DetalleCompraRequestDTO linea : lineas) {
+            Producto producto = productoRepositorio.findById(linea.getIdProducto())
+                    .filter(p -> p.getNegocio().getIdNegocio().equals(negocio.getIdNegocio()))
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado: " + linea.getIdProducto()));
+            String nombre = producto.getDescripcionProducto();
+            if (!vistos.add(producto.getIdProducto())) {
+                throw new OperacionRechazadaException("El producto " + nombre
+                        + " está repetido en la compra: indique la cantidad total en una sola línea.");
+            }
+            if (!Constantes.ACTIVO.equals(producto.getEstadoProducto())) {
+                throw new OperacionRechazadaException("El producto " + nombre + " se encuentra inactivo y no puede venderse.");
+            }
+            String modalidad = producto.getModalidadVentaProducto();
+            if (enCuotas && Constantes.MODALIDAD_CONTADO.equals(modalidad)) {
+                throw new OperacionRechazadaException("El producto " + nombre + " solo se vende a un solo pago.");
+            }
+            if (!enCuotas && Constantes.MODALIDAD_CREDITO.equals(modalidad)) {
+                throw new OperacionRechazadaException("El producto " + nombre + " solo se vende en cuotas.");
+            }
+            DetalleCompra detalle = new DetalleCompra();
+            detalle.setProducto(producto);
+            detalle.setCantidadProducto(linea.getCantidadProducto());
+            detalle.setPrecioCreditoAplicado(producto.getPrecioCredito());
+            detalle.setSubtotal(redondear2(producto.getPrecioCredito().multiply(BigDecimal.valueOf(linea.getCantidadProducto()))));
+            detalles.add(detalle);
+        }
+        return detalles;
+    }
+
     private PlanCompra calcular(CompraRequestDTO request) {
         Negocio negocio = accesoService.negocioActual();
         Cliente cliente = accesoService.clienteAccesible(request.getIdCliente());
         CondicionCredito condicion = cliente.getCondicionCredito();
-        Producto producto = productoRepositorio.findById(request.getIdProducto())
-                .filter(p -> p.getNegocio().getIdNegocio().equals(negocio.getIdNegocio()))
-                .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado: " + request.getIdProducto()));
-
-        boolean enCuotas = Constantes.CUOTAS.equals(request.getTipoPago());
-        int numeroCuotas = enCuotas ? request.getNumeroCuotas() : 1;
-        LocalDate fechaCompra = request.getFechaCompra() != null ? request.getFechaCompra() : Constantes.hoy();
-        BigDecimal montoCompra = redondear2(producto.getPrecioCredito().multiply(BigDecimal.valueOf(request.getCantidadProducto())));
-        BigDecimal creditoDisponible = cuentaCorriente.creditoDisponible(cliente, null);
-        String moneda = condicion.getMoneda();
 
         // Validaciones (juego de prueba 3): ninguna compra rechazada se registra
         if (!Constantes.ACTIVO.equals(cliente.getEstadoCliente())) {
             throw new OperacionRechazadaException("El cliente se encuentra inactivo y no puede registrar nuevas compras.");
         }
-        if (!Constantes.ACTIVO.equals(producto.getEstadoProducto())) {
-            throw new OperacionRechazadaException("El producto se encuentra inactivo y no puede venderse.");
-        }
-        String modalidad = producto.getModalidadVentaProducto();
-        if (enCuotas && Constantes.MODALIDAD_CONTADO.equals(modalidad)) {
-            throw new OperacionRechazadaException("El producto solo se vende a un solo pago.");
-        }
-        if (!enCuotas && Constantes.MODALIDAD_CREDITO.equals(modalidad)) {
-            throw new OperacionRechazadaException("El producto solo se vende en cuotas.");
-        }
+        boolean enCuotas = Constantes.CUOTAS.equals(request.getTipoPago());
+        List<DetalleCompra> detalles = armarDetalles(request, negocio, enCuotas);
+
+        int numeroCuotas = enCuotas ? request.getNumeroCuotas() : 1;
+        LocalDate fechaCompra = request.getFechaCompra() != null ? request.getFechaCompra() : Constantes.hoy();
+        // montoCompra = Σ cantidadProducto × precioCredito de todas las líneas
+        BigDecimal montoCompra = detalles.stream().map(DetalleCompra::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal creditoDisponible = cuentaCorriente.creditoDisponible(cliente, null);
+        String moneda = condicion.getMoneda();
+
         if (montoCompra.compareTo(creditoDisponible) > 0) {
             throw new OperacionRechazadaException("El monto de la compra excede el crédito disponible ("
                     + cuentaCorriente.formatoMonto(moneda, creditoDisponible) + ").");
@@ -165,11 +202,12 @@ public class CompraServiceImpl implements CompraService {
                 .estadoOperacion(Constantes.PROCESADA)
                 .idCliente(cliente.getIdCliente())
                 .nombreCliente(cliente.getNombreCliente())
-                .descripcionProducto(producto.getDescripcionProducto())
+                .descripcionProducto(detalles.stream().map(d -> d.getProducto().getDescripcionProducto())
+                        .collect(Collectors.joining(", ")))
                 .moneda(moneda)
                 .fechaCompra(fechaCompra)
-                .cantidadProducto(request.getCantidadProducto())
-                .precioCredito(producto.getPrecioCredito())
+                .cantidadProducto(detalles.stream().mapToInt(DetalleCompra::getCantidadProducto).sum())
+                .detalles(detalles.stream().map(CompraServiceImpl::aDTO).toList())
                 .montoCompra(montoCompra)
                 .tipoPago(request.getTipoPago())
                 .numeroCuotas(numeroCuotas)
@@ -195,7 +233,7 @@ public class CompraServiceImpl implements CompraService {
             resultado.setCapitalActualizado(montoCompra);
             List<FilaCronograma> unica = List.of(new FilaCronograma(1, fechaPagoCiclo, montoCompra, interes,
                     montoCompra, total, BigDecimal.ZERO.setScale(2)));
-            return new PlanCompra(cliente, producto, fechaCompra, 1, montoCompra, montoCompra, 0, unica, resultado);
+            return new PlanCompra(cliente, detalles, fechaCompra, 1, montoCompra, montoCompra, 0, unica, resultado);
         }
 
         /*
@@ -217,7 +255,12 @@ public class CompraServiceImpl implements CompraService {
         resultado.setMontoTotalPagar(cuotas.stream().map(FilaCronograma::cuota).reduce(BigDecimal.ZERO, BigDecimal::add));
         // Costo financiero total: intereses de la gracia más los del cronograma
         resultado.setInteresCompensatorioDeuda(resultado.getMontoTotalPagar().subtract(montoCompra));
-        return new PlanCompra(cliente, producto, fechaCompra, numeroCuotas, montoCompra, capitalActualizado,
+        return new PlanCompra(cliente, detalles, fechaCompra, numeroCuotas, montoCompra, capitalActualizado,
                 diasGracia, cuotas, resultado);
+    }
+
+    static DetalleCompraDTO aDTO(DetalleCompra d) {
+        return new DetalleCompraDTO(d.getProducto().getIdProducto(), d.getProducto().getDescripcionProducto(),
+                d.getCantidadProducto(), d.getPrecioCreditoAplicado(), d.getSubtotal());
     }
 }

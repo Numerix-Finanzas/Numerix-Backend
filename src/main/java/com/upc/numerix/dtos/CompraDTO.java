@@ -19,6 +19,7 @@ public class CompraDTO {
     private LocalDate fechaCompra;
     private String descripcionProducto;
     private Integer cantidadProducto;
+    private java.util.List<DetalleCompraDTO> detalles;
     private String tipoPago;
     private Integer numeroCuotas;
     private BigDecimal montoCompra;

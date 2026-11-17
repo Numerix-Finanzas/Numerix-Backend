@@ -12,7 +12,7 @@ Pruebas automáticas (no necesitan PostgreSQL, usan H2 en memoria): `./mvnw test
 
 ### Script PostgreSQL (`docs/numerix-postgresql.sql`)
 
-Crea las 10 tablas con sus claves, restricciones CHECK e índices, y carga los mismos datos iniciales que `import.sql`. Sirve para el informe o para crear la base a mano en pgAdmin o psql. Si lo usan así, cambien `spring.jpa.hibernate.ddl-auto` a `validate` o `none`, para que Hibernate no vuelva a crear las tablas.
+Crea las 11 tablas con sus claves, restricciones CHECK e índices, y carga los mismos datos iniciales que `import.sql`. Sirve para el informe o para crear la base a mano en pgAdmin o psql. Si lo usan así, cambien `spring.jpa.hibernate.ddl-auto` a `validate` o `none`, para que Hibernate no vuelva a crear las tablas.
 
 ### Base de datos inicial (`src/main/resources/import.sql`)
 
@@ -54,7 +54,7 @@ Todos usan el prefijo `/api` y necesitan el header `Authorization: Bearer <jwt>`
 | PUT | `/clientes/{id}`, `/clientes/{id}/estado` | AdminNegocio | Cambiar las condiciones o el estado de un cliente |
 | GET | `/clientes/{id}` | AdminNegocio, Cliente | Datos del cliente y crédito disponible |
 | POST | `/compras/simular` | AdminNegocio | Resumen antes de registrar (crédito disponible, cuota estimada) |
-| POST | `/compras` | AdminNegocio | Registro de compra a crédito |
+| POST | `/compras` | AdminNegocio | Registro de compra a crédito con uno o varios productos (ver abajo) |
 | GET | `/clientes/{id}/cronograma` | AdminNegocio, Cliente | Pantalla Cronograma: se elige el cliente y se ven los cronogramas de sus compras **en cuotas** y la próxima fecha de pago |
 | GET | `/compras/{id}/cronograma` | AdminNegocio, Cliente | Cronograma de una compra en cuotas (una compra a un solo pago responde 422) |
 | GET | `/clientes/{id}/obligaciones-pendientes` | AdminNegocio, Cliente | Combo de obligaciones del Registro de pago |
@@ -64,11 +64,26 @@ Todos usan el prefijo `/api` y necesitan el header `Authorization: Bearer <jwt>`
 | GET | `/clientes/{id}/compras?fechaInicioConsulta=&fechaFinConsulta=` | AdminNegocio, Cliente | Movimientos – Compras |
 | GET | `/clientes/{id}/pagos?fechaInicioConsulta=&fechaFinConsulta=` | AdminNegocio, Cliente | Movimientos – Pagos |
 
+Body de `POST /compras` con varios productos (también se acepta `"idProducto"` + `"cantidadProducto"` para un solo producto):
+
+```json
+{
+  "idCliente": "CLI-45871236",
+  "tipoPago": "Un solo pago",
+  "fechaCompra": "2026-11-16",
+  "detalles": [
+    { "idProducto": "PRD-00001", "cantidadProducto": 2 },
+    { "idProducto": "PRD-00002", "cantidadProducto": 3 }
+  ]
+}
+```
+
 Una operación que incumple una regla responde **422** con `{"estadoOperacion": "Rechazada", "mensaje": "..."}`. Un dato mal ingresado responde **400** con `errores` por campo.
 
 ## Reglas implementadas (juegos de prueba del informe)
 
 - Se usa un año de 360 días y meses de 30 días. TED y TEM se redondean a 7 decimales y los importes a 2.
+- **Varios productos por compra:** cada producto es una línea de `detalle_compra` con su cantidad, el precio crédito y el subtotal. `montoCompra` es la suma de los subtotales y los intereses y cuotas se calculan sobre ese total. Cada producto debe ser del negocio, estar activo, no repetirse y admitir el tipo de pago elegido (su modalidad de venta); el límite de crédito se compara con el total.
 - **Un solo pago:** la compra vence en la fecha de pago del ciclo. Si se hizo después del corte, vence el mes siguiente. Se cobra el interés compensatorio por los días que pasan entre la compra y esa fecha.
 - **Cuotas:** los días que pasan entre la compra y la fecha de pago del ciclo son de gracia total y se capitalizan. Luego se aplica el método francés vencido ordinario, la primera cuota vence un mes después y la última cuota se ajusta para que el saldo quede en 0.00.
 - **Mora:** se calcula sobre la deuda vencida con la TED moratoria, por los días de atraso.
@@ -79,6 +94,6 @@ Una operación que incumple una regla responde **422** con `{"estadoOperacion": 
   - No se aceptan compras mayores al crédito disponible.
   - No se aceptan más cuotas que el máximo de meses.
   - Un cliente inactivo no puede comprar.
-  - Un producto inactivo no se puede vender, y se respeta su modalidad de venta.
+  - Un producto inactivo no se puede vender, y se respeta la modalidad de venta de cada producto de la compra.
   - Las cuotas se pagan en orden.
 - Cada obligación guarda una copia de las tasas que tenía el cliente al comprar.
