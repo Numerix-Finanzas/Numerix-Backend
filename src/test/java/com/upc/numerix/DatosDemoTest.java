@@ -13,7 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // Verifica que la base de datos inicial (import.sql) se carga y que sus credenciales funcionan
-@SpringBootTest(properties = {"spring.jpa.properties.hibernate.hbm2ddl.import_files=/import.sql", "spring.datasource.url=jdbc:h2:mem:demo;DB_CLOSE_DELAY=-1"})
+@SpringBootTest(properties = {"spring.datasource.url=jdbc:h2:mem:demo;DB_CLOSE_DELAY=-1"})
 @AutoConfigureMockMvc
 class DatosDemoTest {
 

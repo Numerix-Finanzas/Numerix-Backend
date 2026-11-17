@@ -21,8 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  juegos de prueba. Usa la base de datos inicial (import.sql): Bodega Don Lucho con Rosa y
  Bazar La Esquina con Carlos.
  */
-@SpringBootTest(properties = {"spring.jpa.properties.hibernate.hbm2ddl.import_files=/import.sql",
-        "spring.datasource.url=jdbc:h2:mem:seguridad;DB_CLOSE_DELAY=-1"})
+@SpringBootTest(properties = {"spring.datasource.url=jdbc:h2:mem:seguridad;DB_CLOSE_DELAY=-1"})
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class SeguridadYReglasTest {
@@ -72,7 +71,7 @@ class SeguridadYReglasTest {
                 .andExpect(jsonPath("$[0].idCliente").value(ROSA));
         consultar(bodega, "/api/productos").andExpect(jsonPath("$.length()").value(3));
 
-        // Carlos y la licuadora son de Bazar La Esquina
+        // Carlos y el papel higiénico son de Bazar La Esquina
         consultar(bodega, "/api/clientes/" + CARLOS).andExpect(status().isForbidden());
         consultar(bodega, "/api/clientes/" + CARLOS + "/reporte-deuda").andExpect(status().isForbidden());
         consultar(bodega, "/api/clientes/" + CARLOS + "/cronograma").andExpect(status().isForbidden());
@@ -152,12 +151,12 @@ class SeguridadYReglasTest {
         enviar(bodega, "/api/compras", Map.of("idCliente", ROSA, "idProducto", "PRD-00001",
                 "tipoPago", "Cuotas", "numeroCuotas", 2, "fechaCompra", "2026-09-10"))
                 .andExpect(status().is(422))
-                .andExpect(jsonPath("$.mensaje").value("El producto solo se vende a un solo pago."));
+                .andExpect(jsonPath("$.mensaje").value("El producto Arroz Costeño 5 kg solo se vende a un solo pago."));
 
         actualizar(bodega, "/api/productos/PRD-00002/estado", Map.of("estado", "Inactivo")).andExpect(status().isOk());
         enviar(bodega, "/api/compras", Map.of("idCliente", ROSA, "idProducto", "PRD-00002", "fechaCompra", "2026-09-10"))
                 .andExpect(status().is(422))
-                .andExpect(jsonPath("$.mensaje").value("El producto se encuentra inactivo y no puede venderse."));
+                .andExpect(jsonPath("$.mensaje").value("El producto Aceite Primor 1 L se encuentra inactivo y no puede venderse."));
 
         // Precio crédito menor al contado: no se registra el producto
         enviar(bodega, "/api/productos", Map.of("descripcionProducto", "Azúcar", "precioContado", "5.00",
